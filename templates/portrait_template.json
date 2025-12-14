@@ -1,0 +1,79 @@
+{
+  "orientation": "portrait",
+  "template_path": "C:/Users/dimat_rm083r0/Documents/UCSC/Dev PROJECTS/snapshot_posts/templates/portrait_template.png",
+  "photo_area": {
+    "x": 117,
+    "y": 225,
+    "width": 415,
+    "height": 737
+  },
+  "clicked_by": {
+    "rect": {
+      "x": 783,
+      "y": 390,
+      "width": 258,
+      "height": 29
+    },
+    "style": {
+      "font_path": "",
+      "font_size": 42,
+      "fill": "#000000",
+      "align": "left",
+      "line_spacing": 6
+    },
+    "prefix": "",
+    "uppercase": false
+  },
+  "title": {
+    "rect": {
+      "x": 687,
+      "y": 444,
+      "width": 351,
+      "height": 34
+    },
+    "style": {
+      "font_path": "",
+      "font_size": 42,
+      "fill": "#000000",
+      "align": "left",
+      "line_spacing": 6
+    },
+    "prefix": "",
+    "uppercase": false
+  },
+  "description": {
+    "rect": {
+      "x": 598,
+      "y": 501,
+      "width": 429,
+      "height": 466
+    },
+    "style": {
+      "font_path": "",
+      "font_size": 42,
+      "fill": "#000000",
+      "align": "left",
+      "line_spacing": 6
+    },
+    "prefix": "",
+    "uppercase": false
+  },
+  "badge": {
+    "rect": {
+      "x": 603,
+      "y": 222,
+      "width": 184,
+      "height": 132
+    },
+    "style": {
+      "font_path": "",
+      "font_size": 74,
+      "fill": "#000000",
+      "align": "center",
+      "line_spacing": 6
+    },
+    "prefix": "",
+    "uppercase": false
+  },
+  "badge_format": "{0:02d}"
+}
