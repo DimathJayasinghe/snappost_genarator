@@ -9,37 +9,39 @@
   },
   "clicked_by": {
     "rect": {
-      "x": 624,
-      "y": 238,
-      "width": 332,
-      "height": 30
+      "x": 621,
+      "y": 233,
+      "width": 328,
+      "height": 29
     },
     "style": {
       "font_path": "",
-      "font_size": 40,
+      "font_size": 35,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": true
   },
   "title": {
     "rect": {
       "x": 532,
-      "y": 290,
-      "width": 430,
-      "height": 35
+      "y": 284,
+      "width": 419,
+      "height": 28
     },
     "style": {
       "font_path": "",
-      "font_size": 40,
+      "font_size": 35,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": true
   },
   "description": {
     "rect": {
@@ -56,24 +58,26 @@
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": false
   },
   "badge": {
     "rect": {
-      "x": 217,
-      "y": 211,
-      "width": 186,
-      "height": 125
+      "x": 220,
+      "y": 212,
+      "width": 183,
+      "height": 88
     },
     "style": {
-      "font_path": "",
-      "font_size": 120,
-      "fill": "#000000",
+      "font_path": "C:/Users/dimat_rm083r0/Documents/UCSC/Dev PROJECTS/snapshot_posts/FONTS/Poppins/Poppins-SemiBold.ttf",
+      "font_size": 130,
+      "fill": "#c6af33",
       "align": "center",
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": true
   },
   "badge_format": "{0:02d}"
 }

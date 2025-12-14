@@ -30,6 +30,14 @@ class Orientation(Enum):
 
 
 @dataclass
+class PhotoAnalysis:
+	width: int
+	height: int
+	orientation: Orientation
+	aspect_ratio: float
+
+
+@dataclass
 class Rectangle:
 	x: int
 	y: int
@@ -81,6 +89,7 @@ class TextField:
 	style: TextStyle
 	prefix: str = ""
 	uppercase: bool = False
+	visible: bool = True
 
 	def to_dict(self) -> Dict[str, object]:
 		return {
@@ -88,6 +97,7 @@ class TextField:
 			"style": self.style.to_dict(),
 			"prefix": self.prefix,
 			"uppercase": self.uppercase,
+			"visible": self.visible,
 		}
 
 	@classmethod
@@ -97,6 +107,7 @@ class TextField:
 			style=TextStyle.from_dict(data.get("style", {})),
 			prefix=data.get("prefix", ""),
 			uppercase=bool(data.get("uppercase", False)),
+			visible=bool(data.get("visible", True)),
 		)
 
 
@@ -171,6 +182,7 @@ class ParticipantPhoto:
 	url: str
 	local_path: Optional[Path] = None
 	orientation: Optional[Orientation] = None
+	analysis: Optional[PhotoAnalysis] = None
 
 	def filename_slug(self) -> str:
 		def _slug(value: str) -> str:
@@ -342,12 +354,29 @@ class ImageDownloadService:
 
 
 class OrientationDetector:
-	"""Detect orientation by inspecting image dimensions."""
+	"""Detect orientation by inspecting image dimensions and EXIF metadata."""
+
+	def __init__(self, square_tolerance: float = 0.08, square_preference: Orientation = Orientation.LANDSCAPE) -> None:
+		self.square_tolerance = square_tolerance
+		self.square_preference = square_preference
+
+	def analyze(self, image_path: Path) -> PhotoAnalysis:
+		with Image.open(image_path) as img:
+			img = ImageOps.exif_transpose(img)
+			width, height = img.size
+		aspect_ratio = width / height if height else 1.0
+		orientation = self._decide_orientation(width, height, aspect_ratio)
+		return PhotoAnalysis(width=width, height=height, orientation=orientation, aspect_ratio=aspect_ratio)
 
 	def detect(self, image_path: Path) -> Orientation:
-		with Image.open(image_path) as img:
-			width, height = img.size
-		return Orientation.from_size(width, height)
+		return self.analyze(image_path).orientation
+
+	def _decide_orientation(self, width: int, height: int, ratio: float) -> Orientation:
+		if width <= 0 or height <= 0:
+			return Orientation.LANDSCAPE
+		if abs(ratio - 1.0) <= self.square_tolerance:
+			return self.square_preference
+		return Orientation.LANDSCAPE if ratio > 1.0 else Orientation.PORTRAIT
 
 
 class FontProvider:
@@ -385,7 +414,7 @@ class TemplateRenderer:
 		self._draw_text(draw, layout.clicked_by, photo.participant_name)
 		self._draw_text(draw, layout.title, photo.theme)
 		self._draw_text(draw, layout.description, photo.description)
-		if layout.badge and layout.badge_format:
+		if layout.badge and layout.badge.visible and layout.badge_format:
 			badge_text = layout.badge_format.format(photo.sequence)
 			self._draw_text(draw, layout.badge, badge_text)
 		return template.convert("RGB")
@@ -398,10 +427,14 @@ class TemplateRenderer:
 			canvas.paste(fitted, (area.x, area.y))
 
 	def _draw_text(self, draw: ImageDraw.ImageDraw, field: TextField, text: str) -> None:
+		if not field.visible:
+			return
 		font = self.font_provider.get(field.style)
 		content = f"{field.prefix}{text or ''}".strip()
 		if field.uppercase:
 			content = content.upper()
+		if not content:
+			return
 		lines = self._wrap_text(draw, content, font, field.rect.width)
 		x, y = field.rect.x, field.rect.y
 		for line in lines:
@@ -553,15 +586,25 @@ class PostGenerationService:
 				controller.wait_if_paused()
 				if controller.should_stop():
 					break
-			photo.orientation = self.orientation_detector.detect(local)
+			analysis = self.orientation_detector.analyze(local)
+			photo.analysis = analysis
 			try:
-				layout = self.template_manager.get_layout(photo.orientation)
+				layout = self._select_layout(analysis)
 			except ValueError as err:
 				if progress_callback:
 					progress_callback(str(err))
 				continue
+			photo.orientation = layout.orientation
+			try:
+				layout.ensure_template_exists()
+			except (ValueError, FileNotFoundError) as err:
+				if progress_callback:
+					progress_callback(str(err))
+				continue
 			if progress_callback:
-				progress_callback(f"Rendering ({index}) using {photo.orientation.value} template")
+				progress_callback(
+					f"Rendering ({index}) using {photo.orientation.value} template (aspect {analysis.aspect_ratio:.2f})"
+				)
 			if controller:
 				controller.wait_if_paused()
 				if controller.should_stop():
@@ -574,6 +617,31 @@ class PostGenerationService:
 			if progress_callback:
 				progress_callback(f"Saved {output_path.name}")
 		return results
+
+	@staticmethod
+	def _aspect_ratio(rect: Rectangle) -> float:
+		return rect.width / rect.height if rect and rect.height else 1.0
+
+	def _select_layout(self, analysis: PhotoAnalysis) -> TemplateLayout:
+		candidates: List[Tuple[float, TemplateLayout]] = []
+		for orientation in (Orientation.LANDSCAPE, Orientation.PORTRAIT):
+			try:
+				layout = self.template_manager.get_layout(orientation)
+			except ValueError:
+				continue
+			area_ratio = self._aspect_ratio(layout.photo_area)
+			diff = abs(analysis.aspect_ratio - area_ratio)
+			candidates.append((diff, layout))
+		if not candidates:
+			raise ValueError("No templates configured")
+		candidates.sort(
+			key=lambda item: (
+				round(item[0], 4),
+				item[1].orientation != analysis.orientation,
+				-(item[1].photo_area.width * item[1].photo_area.height),
+			)
+		)
+		return candidates[0][1]
 
 
 class LogHandler:
@@ -678,6 +746,14 @@ class TemplateEditor(tk.Toplevel):
 			ttk.Separator(self.controls_container).pack(fill="x", pady=4)
 			ttk.Label(self.controls_container, text="Text Style").pack(anchor="w")
 			layout_field = self._get_field(field_key)
+			if field_key != "photo":
+				visible_var = tk.BooleanVar(value=layout_field.visible)
+
+				def update_visible() -> None:
+					layout_field.visible = visible_var.get()
+					self._draw_existing_rectangles()
+
+				ttk.Checkbutton(self.controls_container, text="Show Field", variable=visible_var, command=update_visible).pack(anchor="w", pady=(0, 4))
 			ttk.Button(self.controls_container, text="Font File", command=lambda: self._choose_font(layout_field)).pack(fill="x", pady=(2, 2))
 			ttk.Label(self.controls_container, text=f"Current: {Path(layout_field.style.font_path).name if layout_field.style.font_path else 'Default'}").pack(anchor="w")
 
@@ -780,18 +856,21 @@ class TemplateEditor(tk.Toplevel):
 
 	def _draw_existing_rectangles(self) -> None:
 		self.canvas.delete("rect")
-		def draw_field(name: str, rect: Rectangle, color: str) -> None:
+
+		def draw_field(name: str, rect: Rectangle, color: str, visible: bool = True) -> None:
 			if not rect:
 				return
 			scaled = self._scale_rect(rect)
-			self._rect_items[name] = self.canvas.create_rectangle(*scaled, outline=color, width=2, tags="rect")
+			outline = color if visible else "#9e9e9e"
+			dash = None if visible else (4, 2)
+			self._rect_items[name] = self.canvas.create_rectangle(*scaled, outline=outline, width=2, dash=dash, tags="rect")
 
 		draw_field("photo", self.layout.photo_area, "#2f80ed")
 		if self.layout.badge:
-			draw_field("badge", self.layout.badge.rect, "#9b51e0")
-		draw_field("clicked_by", self.layout.clicked_by.rect, "#27ae60")
-		draw_field("title", self.layout.title.rect, "#f2994a")
-		draw_field("description", self.layout.description.rect, "#eb5757")
+			draw_field("badge", self.layout.badge.rect, "#9b51e0", self.layout.badge.visible)
+		draw_field("clicked_by", self.layout.clicked_by.rect, "#27ae60", self.layout.clicked_by.visible)
+		draw_field("title", self.layout.title.rect, "#f2994a", self.layout.title.visible)
+		draw_field("description", self.layout.description.rect, "#eb5757", self.layout.description.visible)
 
 	def _scale_rect(self, rect: Rectangle) -> Tuple[int, int, int, int]:
 		scale = self._display_scale

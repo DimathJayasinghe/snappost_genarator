@@ -10,36 +10,38 @@
   "clicked_by": {
     "rect": {
       "x": 783,
-      "y": 390,
-      "width": 258,
+      "y": 382,
+      "width": 247,
+      "height": 30
+    },
+    "style": {
+      "font_path": "",
+      "font_size": 35,
+      "fill": "#000000",
+      "align": "left",
+      "line_spacing": 6
+    },
+    "prefix": "",
+    "uppercase": false,
+    "visible": true
+  },
+  "title": {
+    "rect": {
+      "x": 682,
+      "y": 436,
+      "width": 344,
       "height": 29
     },
     "style": {
       "font_path": "",
-      "font_size": 40,
+      "font_size": 35,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
-  },
-  "title": {
-    "rect": {
-      "x": 687,
-      "y": 444,
-      "width": 351,
-      "height": 34
-    },
-    "style": {
-      "font_path": "",
-      "font_size": 40,
-      "fill": "#000000",
-      "align": "left",
-      "line_spacing": 6
-    },
-    "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": true
   },
   "description": {
     "rect": {
@@ -56,24 +58,26 @@
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": false
   },
   "badge": {
     "rect": {
-      "x": 603,
-      "y": 225,
-      "width": 183,
-      "height": 127
+      "x": 608,
+      "y": 223,
+      "width": 179,
+      "height": 81
     },
     "style": {
-      "font_path": "",
+      "font_path": "C:/Users/dimat_rm083r0/Documents/UCSC/Dev PROJECTS/snapshot_posts/FONTS/Poppins/Poppins-SemiBold.ttf",
       "font_size": 120,
-      "fill": "#000000",
+      "fill": "#bfad46",
       "align": "center",
       "line_spacing": 6
     },
     "prefix": "",
-    "uppercase": false
+    "uppercase": false,
+    "visible": true
   },
   "badge_format": "{0:02d}"
 }
