@@ -1,6 +1,6 @@
 {
   "orientation": "portrait",
-  "template_path": "C:/Users/dimat_rm083r0/Documents/UCSC/Dev PROJECTS/snapshot_posts/templates/portrait_template.png",
+  "template_path": "C:\\Users\\dimat_rm083r0\\Documents\\UCSC\\Dev PROJECTS\\snapshot_posts\\templates\\portrait_template.png",
   "photo_area": {
     "x": 117,
     "y": 225,
@@ -16,7 +16,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 40,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
@@ -33,7 +33,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 40,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
@@ -50,7 +50,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 30,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
@@ -61,13 +61,13 @@
   "badge": {
     "rect": {
       "x": 603,
-      "y": 222,
-      "width": 184,
-      "height": 132
+      "y": 225,
+      "width": 183,
+      "height": 127
     },
     "style": {
       "font_path": "",
-      "font_size": 74,
+      "font_size": 120,
       "fill": "#000000",
       "align": "center",
       "line_spacing": 6

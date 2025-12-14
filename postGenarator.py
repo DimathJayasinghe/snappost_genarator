@@ -3,7 +3,7 @@ import json
 import queue
 import re
 import threading
-import textwrap
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -405,7 +405,7 @@ class TemplateRenderer:
 		lines = self._wrap_text(draw, content, font, field.rect.width)
 		x, y = field.rect.x, field.rect.y
 		for line in lines:
-			line_width, line_height = draw.textsize(line, font=font)
+			line_width, line_height = self._measure_text(draw, line, font)
 			x_position = x
 			if field.style.align == "center":
 				x_position = x + max((field.rect.width - line_width) // 2, 0)
@@ -416,8 +416,18 @@ class TemplateRenderer:
 			if y > field.rect.y + field.rect.height:
 				break
 
-	@staticmethod
-	def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> List[str]:
+	def _measure_text(self, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> Tuple[int, int]:
+		if not text:
+			return 0, font.size
+		try:
+			bbox = draw.textbbox((0, 0), text, font=font)
+			width = bbox[2] - bbox[0]
+			height = bbox[3] - bbox[1]
+		except AttributeError:
+			width, height = font.getsize(text)
+		return width, height or font.size
+
+	def _wrap_text(self, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> List[str]:
 		if not text:
 			return []
 		words = text.split()
@@ -427,7 +437,7 @@ class TemplateRenderer:
 		current: List[str] = []
 		for word in words:
 			candidate = " ".join(current + [word]) if current else word
-			width, _ = draw.textsize(candidate, font=font)
+			width, _ = self._measure_text(draw, candidate, font)
 			if width <= max_width or not current:
 				current.append(word)
 			else:
@@ -458,6 +468,41 @@ class TemplateManager:
 		return self._sources.get(orientation)
 
 
+class GenerationController:
+	"""Control object that supports pausing and stopping generation."""
+
+	def __init__(self) -> None:
+		self._stop_event = threading.Event()
+		self._pause_event = threading.Event()
+		self._stopped = False
+
+	def request_stop(self) -> None:
+		self._stopped = True
+		self._stop_event.set()
+		self._pause_event.clear()
+
+	def request_pause(self) -> None:
+		self._pause_event.set()
+
+	def request_resume(self) -> None:
+		self._pause_event.clear()
+
+	def should_stop(self) -> bool:
+		return self._stop_event.is_set()
+
+	def wait_if_paused(self, check_interval: float = 0.2) -> None:
+		while self._pause_event.is_set() and not self.should_stop():
+			time.sleep(check_interval)
+
+	@property
+	def paused(self) -> bool:
+		return self._pause_event.is_set()
+
+	@property
+	def stopped(self) -> bool:
+		return self._stopped or self.should_stop()
+
+
 class PostGenerationService:
 	"""Coordinator that generates posts for the provided submissions."""
 
@@ -473,13 +518,26 @@ class PostGenerationService:
 		self.downloader = downloader
 		self.orientation_detector = orientation_detector
 
-	def generate(self, photos: Iterable[ParticipantPhoto], output_dir: Path, cache_dir: Path, progress_callback=None) -> List[Path]:
+	def generate(
+		self,
+		photos: Iterable[ParticipantPhoto],
+		output_dir: Path,
+		cache_dir: Path,
+		progress_callback=None,
+		controller: Optional[GenerationController] = None,
+	) -> List[Path]:
 		output_dir = Path(output_dir)
 		cache_dir = Path(cache_dir)
 		output_dir.mkdir(parents=True, exist_ok=True)
 		cache_dir.mkdir(parents=True, exist_ok=True)
 		results: List[Path] = []
 		for index, photo in enumerate(photos, start=1):
+			if controller:
+				if controller.should_stop():
+					break
+				controller.wait_if_paused()
+				if controller.should_stop():
+					break
 			if progress_callback:
 				progress_callback(f"Downloading ({index}): {photo.url}")
 			try:
@@ -489,6 +547,12 @@ class PostGenerationService:
 					progress_callback(f"Download failed: {err}")
 				continue
 			photo.local_path = local
+			if controller:
+				if controller.should_stop():
+					break
+				controller.wait_if_paused()
+				if controller.should_stop():
+					break
 			photo.orientation = self.orientation_detector.detect(local)
 			try:
 				layout = self.template_manager.get_layout(photo.orientation)
@@ -498,6 +562,10 @@ class PostGenerationService:
 				continue
 			if progress_callback:
 				progress_callback(f"Rendering ({index}) using {photo.orientation.value} template")
+			if controller:
+				controller.wait_if_paused()
+				if controller.should_stop():
+					break
 			composed = self.renderer.render(layout, photo)
 			filename = f"{photo.filename_slug()}.png"
 			output_path = output_dir / filename
@@ -617,7 +685,11 @@ class TemplateEditor(tk.Toplevel):
 			size_var = tk.IntVar(value=layout_field.style.font_size)
 
 			def update_size(*_):
-				layout_field.style.font_size = max(6, size_var.get())
+				try:
+					value = size_var.get()
+				except (tk.TclError, ValueError):
+					return
+				layout_field.style.font_size = max(6, value)
 
 			size_entry = ttk.Spinbox(self.controls_container, from_=6, to=256, textvariable=size_var, command=update_size)
 			size_entry.pack(fill="x")
@@ -638,7 +710,11 @@ class TemplateEditor(tk.Toplevel):
 			spacing_var = tk.IntVar(value=layout_field.style.line_spacing)
 
 			def update_spacing(*_):
-				layout_field.style.line_spacing = spacing_var.get()
+				try:
+					value = spacing_var.get()
+				except (tk.TclError, ValueError):
+					return
+				layout_field.style.line_spacing = max(0, value)
 
 			ttk.Spinbox(self.controls_container, from_=0, to=100, textvariable=spacing_var, command=update_spacing).pack(fill="x")
 			spacing_var.trace_add("write", lambda *_: update_spacing())
@@ -860,6 +936,8 @@ class SnapshotApp(tk.Tk):
 			downloader=self.downloader,
 			orientation_detector=self.orientation_detector,
 		)
+		self._controller: Optional[GenerationController] = None
+		self._generation_thread: Optional[threading.Thread] = None
 
 		self.csv_path_var = tk.StringVar()
 		self.output_dir_var = tk.StringVar(value=str(Path.cwd() / "output"))
@@ -882,7 +960,12 @@ class SnapshotApp(tk.Tk):
 
 		action_frame = ttk.Frame(container)
 		action_frame.pack(fill="x", pady=8)
-		ttk.Button(action_frame, text="Generate Posts", command=self._start_generation).pack(side="left")
+		self.generate_button = ttk.Button(action_frame, text="Generate Posts", command=self._start_generation)
+		self.generate_button.pack(side="left")
+		self.pause_button = ttk.Button(action_frame, text="Pause", state="disabled", command=self._toggle_pause)
+		self.pause_button.pack(side="left", padx=(8, 0))
+		self.stop_button = ttk.Button(action_frame, text="Stop", state="disabled", command=self._stop_generation)
+		self.stop_button.pack(side="left", padx=(8, 0))
 		ttk.Label(action_frame, textvariable=self.status_var).pack(side="left", padx=12)
 
 		log_frame = ttk.LabelFrame(container, text="Activity Log")
@@ -890,6 +973,41 @@ class SnapshotApp(tk.Tk):
 		self.log_widget = tk.Text(log_frame, height=18, state="normal")
 		self.log_widget.pack(fill="both", expand=True)
 		self.log_handler = LogHandler(self.log_widget)
+
+	def _set_running_state(self, running: bool) -> None:
+		if running:
+			self.generate_button.configure(state="disabled")
+			self.pause_button.configure(state="normal", text="Pause")
+			self.stop_button.configure(state="normal")
+		else:
+			self.generate_button.configure(state="normal")
+			self.pause_button.configure(state="disabled", text="Pause")
+			self.stop_button.configure(state="disabled")
+
+	def _toggle_pause(self) -> None:
+		if not self._controller or not (self._generation_thread and self._generation_thread.is_alive()):
+			return
+		if not self._controller.paused:
+			self._controller.request_pause()
+			self.pause_button.configure(text="Resume")
+			self.status_var.set("Paused")
+			self.log_handler.write("Paused generation")
+		else:
+			if self._controller.should_stop():
+				return
+			self._controller.request_resume()
+			self.pause_button.configure(text="Pause")
+			self.status_var.set("Running...")
+			self.log_handler.write("Resumed generation")
+
+	def _stop_generation(self) -> None:
+		if not self._controller or self._controller.stopped:
+			return
+		self._controller.request_stop()
+		self.pause_button.configure(state="disabled", text="Pause")
+		self.stop_button.configure(state="disabled")
+		self.status_var.set("Stopping...")
+		self.log_handler.write("Stop requested; finishing current photo")
 
 	def _build_file_inputs(self, frame: ttk.Frame) -> None:
 		ttk.Label(frame, text="Responses CSV").grid(row=0, column=0, sticky="w")
@@ -973,6 +1091,9 @@ class SnapshotApp(tk.Tk):
 			self.portrait_status.configure(text="Not configured", foreground="#b00020")
 
 	def _start_generation(self) -> None:
+		if self._generation_thread and self._generation_thread.is_alive():
+			messagebox.showinfo("In Progress", "Generation is already running.")
+			return
 		csv_path = self.csv_path_var.get()
 		if not csv_path:
 			messagebox.showerror("Missing CSV", "Select the responses CSV file first.")
@@ -986,8 +1107,10 @@ class SnapshotApp(tk.Tk):
 
 		output_dir = Path(self.output_dir_var.get())
 		cache_dir = Path(self.cache_dir_var.get())
+		self._controller = GenerationController()
 		self.status_var.set("Preparing...")
 		self.log_handler.write("Starting generation...")
+		self._set_running_state(True)
 
 		def worker() -> None:
 			try:
@@ -1000,22 +1123,43 @@ class SnapshotApp(tk.Tk):
 				self._on_generation_finished("No photos found in CSV")
 				return
 
+			def mark_running() -> None:
+				if self._controller and not self._controller.paused and not self._controller.should_stop():
+					self.status_var.set("Running...")
+
+			self.after(0, mark_running)
+
 			def progress(message: str) -> None:
 				self.log_handler.write(message)
 
+			controller = self._controller
 			try:
-				results = self.generator.generate(photos, output_dir, cache_dir, progress_callback=progress)
+				results = self.generator.generate(
+					photos,
+					output_dir,
+					cache_dir,
+					progress_callback=progress,
+					controller=controller,
+				)
 			except Exception as err:  # noqa: BLE001
 				self._on_generation_finished(f"Generation failed: {err}")
 				return
-			self._on_generation_finished(f"Done. Generated {len(results)} posts in {output_dir}")
+			if controller and controller.stopped:
+				message = f"Stopped. Generated {len(results)} posts in {output_dir}"
+			else:
+				message = f"Done. Generated {len(results)} posts in {output_dir}"
+			self._on_generation_finished(message)
 
-		threading.Thread(target=worker, daemon=True).start()
+		self._generation_thread = threading.Thread(target=worker, daemon=True)
+		self._generation_thread.start()
 
 	def _on_generation_finished(self, message: str) -> None:
 		def update() -> None:
 			self.status_var.set(message)
 			self.log_handler.write(message)
+			self._set_running_state(False)
+			self._controller = None
+			self._generation_thread = None
 
 		self.after(0, update)
 

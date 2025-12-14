@@ -16,7 +16,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 40,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
@@ -33,7 +33,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 40,
       "fill": "#000000",
       "align": "left",
       "line_spacing": 6
@@ -50,9 +50,9 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 42,
+      "font_size": 30,
       "fill": "#000000",
-      "align": "left",
+      "align": "center",
       "line_spacing": 6
     },
     "prefix": "",
@@ -67,7 +67,7 @@
     },
     "style": {
       "font_path": "",
-      "font_size": 74,
+      "font_size": 120,
       "fill": "#000000",
       "align": "center",
       "line_spacing": 6
